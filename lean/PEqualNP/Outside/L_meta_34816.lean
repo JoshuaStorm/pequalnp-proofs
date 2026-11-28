@@ -3761,41 +3761,10 @@ lemma iroot : Imp [] 0 14 := imp_ts (Or.inl rfl) root_p (by norm_num) ir (fun t 
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
 theorem proot_1 : chk [] rt 0 14 1 FF 1 = false := by decide +kernel
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-theorem proot_2 : chk [] rt 0 14 2 FF 1 = false := by decide +kernel
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-theorem proot_3 : chk [] rt 0 14 3 FF 1 = false := by decide +kernel
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-theorem proot_hi : okT [] rt 0 15 [4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14] = true := by decide +kernel
-set_option maxRecDepth 100000 in
-lemma iroot_pos {t : ℕ} {S : Finset ℕ} (ht1 : 1 ≤ t) (hS : (S : Set ℕ) ⊆ C (mz 0) (WZ [] 0))
-    (hl : Live Z0 (mz 0) (tz 0) 14 t S) : False := by
+lemma iroot_1 {S : Finset ℕ} (hS : (S : Set ℕ) ⊆ C (mz 0) (WZ [] 0))
+    (hl : Live Z0 (mz 0) (tz 0) 14 1 S) : False := by
   have hmin : ∀ q < 14, ¬ Sol Z0 (mz 0) (tz 0) q (C (mz 0) (WZ [] 0)) := fun q hq => iroot q hq
-  have hm0 : Min Z0 (mz 0) (tz 0) 14 t S := ⟨hl, fun q hq hs => hmin q hq (hs.mono le_rfl (by rintro x (hx | hx); exact hS hx; exact Or.inr hx))⟩
-  have htk : t < 15 := by have := hm0.size.2; omega
-  have hM : ∃ M : List (ℕ × ℕ), mFull M = true ∧ ∀ p ∈ M, chk [] rt 0 14 t p.1 p.2 = false := by
-    have h := proot_hi
-    simp only [okT, List.all_cons, List.all_nil, Bool.and_true, Bool.and_eq_true, Bool.not_eq_true'] at h
-    obtain ⟨h4, h5, h6, h7, h8, h9, h10, h11, h12, h13, h14⟩ := h
-    interval_cases t
-    · exact one proot_1
-    · exact one proot_2
-    · exact one proot_3
-    · exact one h4
-    · exact one h5
-    · exact one h6
-    · exact one h7
-    · exact one h8
-    · exact one h9
-    · exact one h10
-    · exact one h11
-    · exact one h12
-    · exact one h13
-    · exact one h14
-  exact imp_of_live (L := 15) (Or.inl rfl) root_p (by norm_num) ir (by omega) hS hl hmin (Or.inr hM)
+  exact imp_of_live (L := 15) (Or.inl rfl) root_p (by norm_num) ir (by omega) hS hl hmin (Or.inr (one proot_1))
 open PEqualNP.CircuitLowerBounds PEqualNP.MetaComplexity
 section circuit
 variable (m : ℕ)
@@ -4072,6 +4041,163 @@ theorem bridge_not (gates : List Gate) (o : ℕ) (hD : FanInTwo ⟨gates, o⟩) 
       rw [h]; exact (f_bit k).symm
   exact ex_sol_not (mz 0) gates init (C (mz 0) (WZ [] 0)) hinit_mem (Or.inr (Set.mem_insert _ _)) (Or.inr (Set.mem_insert_of_mem _ rfl)) hD hnot ⟨o, hout⟩
 
+lemma ex_sol_mono {T : ℕ} (m : ℕ) (gs : List Gate) : ∀ (w : List ℕ) (S : Set ℕ),
+    (∀ x ∈ w, x ∈ S) → 0 ∈ S → m ∈ S →
+    (∀ g ∈ gs, g.op ∈ ({GateOp.and, GateOp.or, GateOp.not} : Set GateOp) ∧ g.inputs.length ≤ 2) →
+    (∀ g ∈ gs, g.op ≠ GateOp.not) →
+    (∃ i, (ex m gs w).getD i 0 = T) →
+    ∃ k ≤ gs.length, ∃ S0 : Finset ℕ, (S0 : Set ℕ) ⊆ S ∧ Live Z0 m T k 0 S0 := by
+  induction gs with
+  | nil =>
+    rintro w S hw h0 _ _ _ ⟨i, rfl⟩
+    exact ⟨0, le_rfl, {w.getD i 0}, by simpa using getD_mem hw h0 i, .stop⟩
+  | cons g gs ih =>
+    intro w S hw h0 hm hg hmono hT
+    have hgs := fun x hx => hg x (List.mem_cons_of_mem _ hx)
+    have hms := fun x hx => hmono x (List.mem_cons_of_mem _ hx)
+    have rd := fun i => getD_mem hw h0 i
+    have hwm_stay : gv m w g ∈ S → ∀ x ∈ w ++ [gv m w g], x ∈ S := fun h x hx => by
+      simp only [List.mem_append, List.mem_singleton] at hx; rcases hx with hx | rfl; exact hw x hx; exact h
+    have hwm_ins : ∀ x ∈ w ++ [gv m w g], x ∈ insert (gv m w g) S := fun x hx => by
+      simp only [List.mem_append, List.mem_singleton] at hx; rcases hx with hx | rfl; exact Or.inr (hw x hx); exact Or.inl rfl
+    obtain ⟨hop, _⟩ := hg g List.mem_cons_self
+    have hgn : g.op ≠ GateOp.not := hmono g List.mem_cons_self
+    obtain ⟨o, l⟩ := g
+    simp only [Set.mem_insert_iff, Set.mem_singleton_iff] at hop
+    rcases hop with rfl | rfl | rfl
+    · match l with
+      | [] =>
+        obtain ⟨k, hk, S1, hS1, hl1⟩ := ih (w ++ [gv m w ⟨.and, []⟩]) S (hwm_stay hm) h0 hm hgs hms hT
+        exact ⟨k, by simp; omega, S1, hS1, hl1⟩
+      | [i] =>
+        obtain ⟨k, hk, S1, hS1, hl1⟩ := ih (w ++ [gv m w ⟨.and, [i]⟩]) S (hwm_stay (rd i)) h0 hm hgs hms hT
+        exact ⟨k, by simp; omega, S1, hS1, hl1⟩
+      | i :: j :: _ =>
+        obtain ⟨k, hk, S1, hS1, hl1⟩ := ih (w ++ [gv m w ⟨.and, i :: j :: _⟩]) (insert (op false (w.getD i 0) (w.getD j 0)) S) hwm_ins (Or.inr h0) (Or.inr hm) hgs hms hT
+        by_cases hz : op false (w.getD i 0) (w.getD j 0) ∈ S1
+        · by_cases hab : w.getD i 0 = w.getD j 0
+          · exact ⟨k, by simp; omega, S1, fun x hx => (hS1 hx).elim (fun e => by subst e; rw [hab, op_self]; exact rd j) id, hl1⟩
+          · refine ⟨k + 1, by simp; omega, insert (w.getD i 0) (insert (w.getD j 0) (S1.erase (op false (w.getD i 0) (w.getD j 0)))), ?_, Live.bi hab (al0 _ _ _) (by rwa [Finset.insert_erase hz])⟩
+            intro x hx; simp at hx; rcases hx with rfl | rfl | ⟨h1, h2⟩; exact rd i; exact rd j; exact (hS1 h1).resolve_left h2
+        · exact ⟨k, by simp; omega, S1, fun x hx => (hS1 hx).resolve_left (fun e => hz (e ▸ hx)), hl1⟩
+    · match l with
+      | [] =>
+        obtain ⟨k, hk, S1, hS1, hl1⟩ := ih (w ++ [gv m w ⟨.or, []⟩]) S (hwm_stay h0) h0 hm hgs hms hT
+        exact ⟨k, by simp; omega, S1, hS1, hl1⟩
+      | [i] =>
+        obtain ⟨k, hk, S1, hS1, hl1⟩ := ih (w ++ [gv m w ⟨.or, [i]⟩]) S (hwm_stay (rd i)) h0 hm hgs hms hT
+        exact ⟨k, by simp; omega, S1, hS1, hl1⟩
+      | i :: j :: _ =>
+        obtain ⟨k, hk, S1, hS1, hl1⟩ := ih (w ++ [gv m w ⟨.or, i :: j :: _⟩]) (insert (op true (w.getD i 0) (w.getD j 0)) S) hwm_ins (Or.inr h0) (Or.inr hm) hgs hms hT
+        by_cases hz : op true (w.getD i 0) (w.getD j 0) ∈ S1
+        · by_cases hab : w.getD i 0 = w.getD j 0
+          · exact ⟨k, by simp; omega, S1, fun x hx => (hS1 hx).elim (fun e => by subst e; rw [hab, op_self]; exact rd j) id, hl1⟩
+          · refine ⟨k + 1, by simp; omega, insert (w.getD i 0) (insert (w.getD j 0) (S1.erase (op true (w.getD i 0) (w.getD j 0)))), ?_, Live.bi hab (al0 _ _ _) (by rwa [Finset.insert_erase hz])⟩
+            intro x hx; simp at hx; rcases hx with rfl | rfl | ⟨h1, h2⟩; exact rd i; exact rd j; exact (hS1 h1).resolve_left h2
+        · exact ⟨k, by simp; omega, S1, fun x hx => (hS1 hx).resolve_left (fun e => hz (e ▸ hx)), hl1⟩
+    · exact absurd rfl hgn
+
+lemma ex_sol_1not {T : ℕ} (m : ℕ) (gs : List Gate) : ∀ (w : List ℕ) (S : Set ℕ),
+    (∀ x ∈ w, x ∈ S) → 0 ∈ S → m ∈ S →
+    (∀ g ∈ gs, g.op ∈ ({GateOp.and, GateOp.or, GateOp.not} : Set GateOp) ∧ g.inputs.length ≤ 2) →
+    (∀ i j : Fin gs.length, (gs.get i).op = GateOp.not → (gs.get j).op = GateOp.not → i = j) →
+    (∃ g ∈ gs, g.op = GateOp.not) →
+    (∃ i, (ex m gs w).getD i 0 = T) →
+    Sol Z0 m T (gs.length - 1) S ∨ ∃ S0 : Finset ℕ, (S0 : Set ℕ) ⊆ S ∧ Live Z0 m T gs.length 1 S0 := by
+  induction gs with
+  | nil => intro _ _ _ _ _ _ _ hnot; simp at hnot
+  | cons g gs ih =>
+    intro w S hw h0 hm hg hone hnot hT
+    have hgs := fun x hx => hg x (List.mem_cons_of_mem _ hx)
+    have hone' : ∀ i j : Fin gs.length, (gs.get i).op = GateOp.not → (gs.get j).op = GateOp.not → i = j := by
+      intro i j hi hj
+      have := hone i.succ j.succ hi hj
+      exact Fin.succ_inj.mp this
+    have rd := fun i => getD_mem hw h0 i
+    have hwm_stay : gv m w g ∈ S → ∀ x ∈ w ++ [gv m w g], x ∈ S := fun h x hx => by
+      simp only [List.mem_append, List.mem_singleton] at hx; rcases hx with hx | rfl; exact hw x hx; exact h
+    have hwm_ins : ∀ x ∈ w ++ [gv m w g], x ∈ insert (gv m w g) S := fun x hx => by
+      simp only [List.mem_append, List.mem_singleton] at hx; rcases hx with hx | rfl; exact Or.inr (hw x hx); exact Or.inl rfl
+    obtain ⟨hop, _⟩ := hg g List.mem_cons_self
+    obtain ⟨o, l⟩ := g
+    simp only [Set.mem_insert_iff, Set.mem_singleton_iff] at hop
+    rcases hop with rfl | rfl | rfl
+    · have hnot' : ∃ g' ∈ gs, g'.op = GateOp.not := by
+        rcases hnot with ⟨g', hg', ho⟩; simp only [List.mem_cons] at hg'; rcases hg' with rfl | hg'; simp at ho; exact ⟨g', hg', ho⟩
+      match l with
+      | [] => exact Or.inl (ex_sol m gs (w ++ [gv m w ⟨.and, []⟩]) S (hwm_stay hm) h0 hm hgs hT)
+      | [i] => exact Or.inl (ex_sol m gs (w ++ [gv m w ⟨.and, [i]⟩]) S (hwm_stay (rd i)) h0 hm hgs hT)
+      | i :: j :: _ =>
+        rcases ih (w ++ [gv m w ⟨.and, i :: j :: _⟩]) (insert (op false (w.getD i 0) (w.getD j 0)) S) hwm_ins (Or.inr h0) (Or.inr hm) hgs hone' hnot' hT with hs | ⟨S1, hS1, hl1⟩
+        · exact Or.inl ((Sol.bi (d := false) (rd i) (rd j) (al0 _ _ _) hs).mono (by cases gs <;> simp at hnot' ⊢) subset_rfl)
+        · by_cases hz : op false (w.getD i 0) (w.getD j 0) ∈ S1
+          · by_cases hab : w.getD i 0 = w.getD j 0
+            · have hsub : (S1 : Set ℕ) ⊆ S := fun x hx => (hS1 hx).elim (fun e => by subst e; rw [hab, op_self]; exact rd j) id
+              exact Or.inl (hl1.sol.mono le_rfl hsub)
+            · refine Or.inr ⟨insert (w.getD i 0) (insert (w.getD j 0) (S1.erase (op false (w.getD i 0) (w.getD j 0)))), ?_, Live.bi hab (al0 _ _ _) (by rwa [Finset.insert_erase hz])⟩
+              intro x hx; simp at hx; rcases hx with rfl | rfl | ⟨h1, h2⟩; exact rd i; exact rd j; exact (hS1 h1).resolve_left h2
+          · exact Or.inl (hl1.sol.mono le_rfl (fun x hx => (hS1 hx).resolve_left (fun e => hz (e ▸ hx))))
+    · have hnot' : ∃ g' ∈ gs, g'.op = GateOp.not := by
+        rcases hnot with ⟨g', hg', ho⟩; simp only [List.mem_cons] at hg'; rcases hg' with rfl | hg'; simp at ho; exact ⟨g', hg', ho⟩
+      match l with
+      | [] => exact Or.inl (ex_sol m gs (w ++ [gv m w ⟨.or, []⟩]) S (hwm_stay h0) h0 hm hgs hT)
+      | [i] => exact Or.inl (ex_sol m gs (w ++ [gv m w ⟨.or, [i]⟩]) S (hwm_stay (rd i)) h0 hm hgs hT)
+      | i :: j :: _ =>
+        rcases ih (w ++ [gv m w ⟨.or, i :: j :: _⟩]) (insert (op true (w.getD i 0) (w.getD j 0)) S) hwm_ins (Or.inr h0) (Or.inr hm) hgs hone' hnot' hT with hs | ⟨S1, hS1, hl1⟩
+        · exact Or.inl ((Sol.bi (d := true) (rd i) (rd j) (al0 _ _ _) hs).mono (by cases gs <;> simp at hnot' ⊢) subset_rfl)
+        · by_cases hz : op true (w.getD i 0) (w.getD j 0) ∈ S1
+          · by_cases hab : w.getD i 0 = w.getD j 0
+            · have hsub : (S1 : Set ℕ) ⊆ S := fun x hx => (hS1 hx).elim (fun e => by subst e; rw [hab, op_self]; exact rd j) id
+              exact Or.inl (hl1.sol.mono le_rfl hsub)
+            · refine Or.inr ⟨insert (w.getD i 0) (insert (w.getD j 0) (S1.erase (op true (w.getD i 0) (w.getD j 0)))), ?_, Live.bi hab (al0 _ _ _) (by rwa [Finset.insert_erase hz])⟩
+              intro x hx; simp at hx; rcases hx with rfl | rfl | ⟨h1, h2⟩; exact rd i; exact rd j; exact (hS1 h1).resolve_left h2
+          · exact Or.inl (hl1.sol.mono le_rfl (fun x hx => (hS1 hx).resolve_left (fun e => hz (e ▸ hx))))
+    · have hmono : ∀ g' ∈ gs, g'.op ≠ GateOp.not := by
+        intro g' hg' ho
+        obtain ⟨idx, rfl⟩ := List.mem_iff_get.mp hg'
+        have := hone ⟨0, by simp⟩ idx.succ rfl ho
+        exact Fin.succ_ne_zero idx this.symm
+      match l with
+      | [] => exact Or.inl (ex_sol m gs (w ++ [gv m w ⟨.not, []⟩]) S (hwm_stay hm) h0 hm hgs hT)
+      | i :: _ =>
+        obtain ⟨k, hk, S1, hS1, hl1⟩ := ex_sol_mono m gs (w ++ [gv m w ⟨.not, i :: _⟩]) (insert (w.getD i 0 ^^^ m) S) hwm_ins (Or.inr h0) (Or.inr hm) hgs hmono hT
+        by_cases hz : w.getD i 0 ^^^ m ∈ S1
+        · have hsub : ((insert (w.getD i 0) (S1.erase (w.getD i 0 ^^^ m)) : Finset ℕ) : Set ℕ) ⊆ S := by
+            intro x hx; simp at hx; rcases hx with rfl | ⟨h1, h2⟩; exact rd i; exact (hS1 h1).resolve_left h2
+          have hlu : Live Z0 m T (k + 1) 1 (insert (w.getD i 0) (S1.erase (w.getD i 0 ^^^ m))) := Live.un (by rwa [Finset.insert_erase hz])
+          by_cases hkeq : k = gs.length
+          · subst hkeq; exact Or.inr ⟨_, hsub, hlu⟩
+          · exact Or.inl (hlu.sol.mono (by simp; omega) hsub)
+        · exact Or.inl (hl1.sol.mono (by simp; omega) (fun x hx => (hS1 hx).resolve_left (fun e => hz (e ▸ hx))))
+
+theorem bridge_1not (gates : List Gate) (o : ℕ) (hD : FanInTwo ⟨gates, o⟩)
+    (hone : ∀ i j : Fin gates.length, (gates.get i).op = GateOp.not → (gates.get j).op = GateOp.not → i = j)
+    (hnot : ∃ g ∈ gates, g.op = GateOp.not)
+    (hf : ∀ y : Fin 8 → Bool, Circuit.eval ⟨gates, o⟩ (List.ofFn y) = f y) :
+    Sol Z0 (mz 0) (tz 0) (gates.length - 1) (C (mz 0) (WZ [] 0)) ∨
+    ∃ S0 : Finset ℕ, (S0 : Set ℕ) ⊆ C (mz 0) (WZ [] 0) ∧ Live Z0 (mz 0) (tz 0) gates.length 1 S0 := by
+  let row : ℕ → Fin 8 → Bool := fun k v => (rawP.getD v.val 0).testBit k
+  let init : List ℕ := rawP.map (· &&& mz 0)
+  have hinit_sub : ∀ x ∈ init, x &&& mz 0 = x := by intro x hx; simp only [init, List.mem_map] at hx; obtain ⟨w, _, rfl⟩ := hx; rw [Nat.and_assoc, Nat.and_self]
+  have hinit_mem : ∀ x ∈ init, x ∈ C (mz 0) (WZ [] 0) := by intro x hx; simp only [init, List.mem_map] at hx; obtain ⟨w, hw, rfl⟩ := hx; exact Or.inl ⟨w, by simp [rawL, hw], rfl⟩
+  have hinit_bits : ∀ k, (mz 0).testBit k = true → init.map (fun x => x.testBit k) = List.ofFn (row k) := by intro k hk; simp only [init, List.map_map, Function.comp_def, Nat.testBit_and, hk, Bool.and_true]; rw [row_list]
+  have hout : (ex (mz 0) gates init).getD o 0 = tz 0 := by
+    rw [← EF_ok]
+    have hsub : ∀ x ∈ ex (mz 0) gates init, x &&& mz 0 = x := ex_sub (mz 0) hinit_sub
+    have hsub' := getD_mem (S := {x | x &&& mz 0 = x}) hsub (by simp) o
+    apply Nat.eq_of_testBit_eq; intro k
+    have e1 := congrArg (fun x => x.testBit k) hsub'
+    simp only [Nat.testBit_and] at e1; rw [← e1, Nat.testBit_and]
+    cases hk : (mz 0).testBit k with
+    | false => simp
+    | true =>
+      simp only [Bool.and_true]; rw [← getD_map, ex_bit (mz 0) hk gates init hD, hinit_bits k hk]
+      have h := hf (row k)
+      change (gates.foldl (fun w g => w ++ [g.op.eval (g.inputs.map fun i => w.getD i false)]) (List.ofFn (row k))).getD o false = f (row k) at h
+      rw [h]; exact (f_bit k).symm
+  exact ex_sol_1not (mz 0) gates init (C (mz 0) (WZ [] 0)) hinit_mem (Or.inr (Set.mem_insert _ _)) (Or.inr (Set.mem_insert_of_mem _ rfl)) hD hone hnot ⟨o, hout⟩
+
+
 section onenot
 open PEqualNP.CircuitLowerBounds PEqualNP.MetaComplexity
 
@@ -4096,7 +4222,7 @@ theorem onGraphCorrect : ∀ x : Fin 8 → Bool, f x = decide (∃ i < ([0, 3, 1
 
 theorem onFinal :
 ∀ (gates : List PEqualNP.CircuitLowerBounds.Gate) (o : ℕ), (∀ g ∈ gates, (g.op = PEqualNP.CircuitLowerBounds.GateOp.and ∨ g.op = PEqualNP.CircuitLowerBounds.GateOp.or ∨ g.op = PEqualNP.CircuitLowerBounds.GateOp.not) ∧ g.inputs.length ≤ 2) → (∀ i j : Fin gates.length, (gates.get i).op = PEqualNP.CircuitLowerBounds.GateOp.not → (gates.get j).op = PEqualNP.CircuitLowerBounds.GateOp.not → i = j) → (∀ x : Fin 8 → Bool, PEqualNP.CircuitLowerBounds.Circuit.eval ⟨gates, o⟩ (List.ofFn x) = decide (∃ i < ([0, 3, 1, 4, 2, 4, 0, 5, 1, 5, 2, 5, 0, 6, 1, 6, 3, 6, 0, 7, 2, 7, 3, 7, 4, 7, 6, 7] : List ℕ).length / 2, (List.ofFn x).getD (([0, 3, 1, 4, 2, 4, 0, 5, 1, 5, 2, 5, 0, 6, 1, 6, 3, 6, 0, 7, 2, 7, 3, 7, 4, 7, 6, 7] : List ℕ).getD (2 * i) 0) false = true ∧ (List.ofFn x).getD (([0, 3, 1, 4, 2, 4, 0, 5, 1, 5, 2, 5, 0, 6, 1, 6, 3, 6, 0, 7, 2, 7, 3, 7, 4, 7, 6, 7] : List ℕ).getD (2 * i + 1) 0) false = true)) → ∃ (gates' : List PEqualNP.CircuitLowerBounds.Gate) (o' : ℕ), (∀ g ∈ gates', (g.op = PEqualNP.CircuitLowerBounds.GateOp.and ∨ g.op = PEqualNP.CircuitLowerBounds.GateOp.or) ∧ g.inputs.length ≤ 2) ∧ gates'.length ≤ gates.length ∧ ∀ x : Fin 8 → Bool, PEqualNP.CircuitLowerBounds.Circuit.eval ⟨gates', o'⟩ (List.ofFn x) = decide (∃ i < ([0, 3, 1, 4, 2, 4, 0, 5, 1, 5, 2, 5, 0, 6, 1, 6, 3, 6, 0, 7, 2, 7, 3, 7, 4, 7, 6, 7] : List ℕ).length / 2, (List.ofFn x).getD (([0, 3, 1, 4, 2, 4, 0, 5, 1, 5, 2, 5, 0, 6, 1, 6, 3, 6, 0, 7, 2, 7, 3, 7, 4, 7, 6, 7] : List ℕ).getD (2 * i) 0) false = true ∧ (List.ofFn x).getD (([0, 3, 1, 4, 2, 4, 0, 5, 1, 5, 2, 5, 0, 6, 1, 6, 3, 6, 0, 7, 2, 7, 3, 7, 4, 7, 6, 7] : List ℕ).getD (2 * i + 1) 0) false = true) := by
-  intro gates o hfit _hone hev
+  intro gates o hfit hone hev
   have hf : ∀ y : Fin 8 → Bool, Circuit.eval ⟨gates, o⟩ (List.ofFn y) = f y := fun y => (hev y).trans (onGraphCorrect y).symm
   by_cases hnot : ∃ g ∈ gates, g.op = GateOp.not
   · have hge : 15 ≤ gates.length := by
@@ -4104,9 +4230,9 @@ theorem onFinal :
       by_cases hlt2 : gates.length < 14
       · exact iroot gates.length hlt2 (bridge ⟨gates, o⟩ (fanInTwo_of hfit) hf)
       · have heq : gates.length = 14 := by omega
-        rcases bridge_not gates o (fanInTwo_of hfit) hnot hf with hsol | ⟨t, ht1, S0, hS0, hl0⟩
+        rcases bridge_1not gates o (fanInTwo_of hfit) hone hnot hf with hsol | ⟨S0, hS0, hl0⟩
         · exact iroot (gates.length - 1) (by omega) hsol
-        · rw [heq] at hl0; exact iroot_pos ht1 hS0 hl0
+        · rw [heq] at hl0; exact iroot_1 hS0 hl0
     have hw : onWit.length = 15 := rfl
     exact ⟨onWit, 22, onWitBasis, by omega, fun x => (onWitCorrect x).trans (onGraphCorrect x)⟩
   · refine ⟨gates, o, ?_, le_rfl, hev⟩
